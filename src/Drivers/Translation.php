@@ -89,6 +89,11 @@ abstract class Translation
      * @param $language
      */
     public function translateLanguage($language){
+        //No need to translate e.g. English to English
+        if ($language === $this->sourceLanguage) {
+            return;
+        }
+
         $translations = $this->getSourceLanguageTranslationsWith($language);
 
         foreach ($translations as $type => $groups) {
