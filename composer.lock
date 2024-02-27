@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "daa4dd98ea5837d2352153ddd05d3421",
+    "content-hash": "2e92095e78e271b0bbe136c5daf4c2d0",
     "packages": [
         {
             "name": "brick/math",
@@ -2974,26 +2974,26 @@
         },
         {
             "name": "stichoza/google-translate-php",
-            "version": "v4.1.7",
+            "version": "v5.1.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Stichoza/google-translate-php.git",
-                "reference": "14f6a9c84cd860910706ee3a668fba8a0a1aac0f"
+                "reference": "0d3de083a4b286868c4456cc76448a439a5aae07"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Stichoza/google-translate-php/zipball/14f6a9c84cd860910706ee3a668fba8a0a1aac0f",
-                "reference": "14f6a9c84cd860910706ee3a668fba8a0a1aac0f",
+                "url": "https://api.github.com/repos/Stichoza/google-translate-php/zipball/0d3de083a4b286868c4456cc76448a439a5aae07",
+                "reference": "0d3de083a4b286868c4456cc76448a439a5aae07",
                 "shasum": ""
             },
             "require": {
                 "ext-json": "*",
                 "ext-mbstring": "*",
-                "guzzlehttp/guzzle": "~6.0|~7.0",
-                "php": "^7.1|^8"
+                "guzzlehttp/guzzle": "^7.0",
+                "php": "^8.0"
             },
             "require-dev": {
-                "phpunit/phpunit": "^7.0"
+                "phpunit/phpunit": "^9.5.10"
             },
             "type": "library",
             "autoload": {
@@ -3022,7 +3022,7 @@
             ],
             "support": {
                 "issues": "https://github.com/Stichoza/google-translate-php/issues",
-                "source": "https://github.com/Stichoza/google-translate-php/tree/v4.1.7"
+                "source": "https://github.com/Stichoza/google-translate-php/tree/v5.1.3"
             },
             "funding": [
                 {
@@ -3050,7 +3050,7 @@
                     "type": "patreon"
                 }
             ],
-            "time": "2022-11-25T11:17:52+00:00"
+            "time": "2023-12-18T21:40:16+00:00"
         },
         {
             "name": "symfony/console",
