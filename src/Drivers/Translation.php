@@ -77,9 +77,46 @@ abstract class Translation
      * @return string|null
      * @throws \ErrorException
      */
-    public function getGoogleTranslate($language,$token){
+    public function getGoogleTranslate($language, $token)
+    {
+        $placeholderRegex = '/:([a-zA-Z0-9_]+)/';
+
+        // Step 1: Identify placeholders
+        preg_match_all($placeholderRegex, $token, $matches);
+        $placeholders = $matches[0];
+
+        // Step 2: Replace placeholders with temporary unique strings
+        $modifiedToken = $token;
+        $placeholderMap = [];
+        foreach ($placeholders as $index => $placeholder) {
+            $tempString = 'x' . $index;
+            $placeholderMap[$tempString] = $placeholder;
+            $modifiedToken = str_replace($placeholder, $tempString, $modifiedToken);
+        }
+
+        // Step 3: Translate the modified text using Google Translate
         $tr = new GoogleTranslate($language, $this->sourceLanguage);
-        return $tr->translate($token);
+        $translatedText = $tr->translate($modifiedToken);
+
+        // Step 4: Replace the temporary unique strings back with the original placeholders
+        foreach ($placeholderMap as $tempString => $placeholder) {
+            $translatedText = str_replace($tempString, $placeholder, $translatedText);
+        }
+
+        // Step 5: Check if the number of placeholders has stayed the same
+        preg_match_all($placeholderRegex, $translatedText, $translatedMatches);
+        if (count($translatedMatches[0]) !== count($placeholders)) {
+            // Display an error or warning with more details
+            throw new \ErrorException(sprintf(
+                "Placeholder count mismatch in translated text.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s",
+                $token,
+                $translatedText,
+                json_encode($placeholders),
+                json_encode($translatedMatches[0])
+            ));
+        }
+
+        return $translatedText;
     }
 
     /**
@@ -87,7 +124,8 @@ abstract class Translation
      *
      * @param $language
      */
-    public function translateLanguage($language){
+    public function translateLanguage($language)
+    {
         //No need to translate e.g. English to English
         if ($language === $this->sourceLanguage) {
             return;
