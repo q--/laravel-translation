@@ -104,9 +104,9 @@ abstract class Translation
         // Step 5: Check if the number of placeholders has stayed the same
         preg_match_all($placeholderRegex, $translatedText, $translatedMatches);
         if (count($translatedMatches[0]) !== count($placeholders)) {
-            // Display an error or warning with more details
-            throw new \ErrorException(sprintf(
-                "Placeholder count mismatch in translated text.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s",
+            // Print a warning to stderr
+            fwrite(STDERR, sprintf(
+                "Warning: Placeholder count mismatch in translated text.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s\n",
                 $token,
                 $translatedText,
                 json_encode($placeholders),
