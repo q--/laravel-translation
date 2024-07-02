@@ -87,28 +87,26 @@ abstract class Translation
 
         // Step 2: Replace placeholders with temporary unique strings
         $modifiedToken = $token;
-        $placeholderMap = [];
+        $tempStrings = [];
         foreach ($placeholders as $index => $placeholder) {
-            $tempString = 'x' . $index;
-            $placeholderMap[$tempString] = $placeholder;
-            $modifiedToken = str_replace($placeholder, $tempString, $modifiedToken);
+            $tempStrings[] = 'x' . $index;
         }
+        $modifiedToken = str_replace($placeholders, $tempStrings, $modifiedToken);
 
         // Step 3: Translate the modified text using Google Translate
         $tr = new GoogleTranslate($language, $this->sourceLanguage);
         $translatedText = $tr->translate($modifiedToken);
 
         // Step 4: Replace the temporary unique strings back with the original placeholders
-        foreach ($placeholderMap as $tempString => $placeholder) {
-            $translatedText = str_replace($tempString, $placeholder, $translatedText);
-        }
+        //Note: we're using case-insensitive replace because Google Translate sometimes uppercases the x
+        $translatedText = str_ireplace($tempStrings, $placeholders, $translatedText);
 
         // Step 5: Check if the number of placeholders has stayed the same
         preg_match_all($placeholderRegex, $translatedText, $translatedMatches);
         if (count($translatedMatches[0]) !== count($placeholders)) {
-            // Display an error or warning with more details
-            throw new \ErrorException(sprintf(
-                "Placeholder count mismatch in translated text.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s",
+            // Print a warning to stderr
+            fwrite(STDERR, sprintf(
+                "Warning: Placeholder count mismatch in translated text.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s\n",
                 $token,
                 $translatedText,
                 json_encode($placeholders),
