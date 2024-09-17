@@ -120,7 +120,9 @@ abstract class Translation
         if (count($translatedMatches[0]) !== count($placeholders)) {
             // Print a warning to stderr
             fwrite(STDERR, sprintf(
-                "Warning: Placeholder count mismatch in translated text.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s\n",
+                "Warning: Placeholder count mismatch in translated text when translating %s to %s.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s\n",
+                $this->sourceLanguage,
+                $language,
                 $token,
                 $translatedText,
                 json_encode($placeholders),
