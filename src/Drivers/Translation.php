@@ -89,16 +89,30 @@ abstract class Translation
         $modifiedToken = $token;
         $tempStrings = [];
         foreach ($placeholders as $index => $placeholder) {
-            $tempStrings[] = 'x' . $index;
+            //After some experiments, I found fake URLs were most likely to be left intact by Google Translate
+            $tempStrings[] = 'https://t.co/' .
+                //Use letters instead of numbers for Newar, because Google Translate converts the numbers to Newar script
+                ($language === 'new' ?
+                    mb_strtoupper(base_convert($index+10, 10, 36))
+                    :
+                    //Letters break in other languages, for all other languages we'll use numbers
+                    $index
+                );
         }
         $modifiedToken = str_replace($placeholders, $tempStrings, $modifiedToken);
 
         // Step 3: Translate the modified text using Google Translate
         $tr = new GoogleTranslate($language, $this->sourceLanguage);
-        $translatedText = $tr->translate($modifiedToken);
+        //In Laravel, | is used to separate pluralization variants.
+        //Translate each of these separately to prevent Google Translate mixing them up.
+        $translated = [];
+        foreach(explode('|', $modifiedToken) AS $translatableText){
+            $translated[] = $tr->translate($translatableText);
+        }
+        $translatedText = implode('|', $translated);
 
         // Step 4: Replace the temporary unique strings back with the original placeholders
-        //Note: we're using case-insensitive replace because Google Translate sometimes uppercases the x
+        //Note: we're using case-insensitive replace because Google Translate sometimes uppercases the temp string
         $translatedText = str_ireplace($tempStrings, $placeholders, $translatedText);
 
         // Step 5: Check if the number of placeholders has stayed the same
