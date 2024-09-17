@@ -37,7 +37,7 @@ class AutoTranslateKeysCommand extends BaseCommand
         } catch (\Exception $e) {
             return $this->error($e->getMessage());
         }
-        
-        
+
+
     }
 }
