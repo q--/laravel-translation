@@ -66,6 +66,8 @@ abstract class Translation
         foreach ($languages as $language => $name) {
             $this->saveMissingTranslations($language);
             $this->translateLanguage($language);
+            //Inform the user of what language we just finished translating
+            fwrite(STDOUT, __('translation::translation.auto_translated_language', ['language' => $language]) . PHP_EOL);
         }
     }
 
