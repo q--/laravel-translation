@@ -7,6 +7,7 @@ return [
     'file' => 'File',
     'key' => 'Key',
     'prompt_language' => 'Enter the language code you would like to add (e.g. en)',
+    'prompt_name' => 'Enter the name of the language (e.g. English)',
     'language_added' => 'New language added successfully 🙌',
     'prompt_language_for_key' => 'Enter the language for the key (e.g. en)',
     'prompt_type' => 'Is this a json or array key?',

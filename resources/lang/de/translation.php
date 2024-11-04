@@ -7,6 +7,7 @@ return [
     'file' => 'Datei',
     'key' => 'Schlüssel',
     'prompt_language' => 'Geben Sie den Sprachcode ein, den Sie hinzufügen möchten (z.B. en).',
+    'prompt_name' => 'Geben Sie den Namen der Sprache ein (z. B. Englisch)',
     'language_added' => 'Neue Sprache wurde erfolgreich hinzugefügt 🙌',
     'prompt_language_for_key' => 'Geben Sie die Sprache für den Schlüssel ein (z.B. en)',
     'prompt_type' => 'Ist das ein Json- oder Array-Schlüssel?',

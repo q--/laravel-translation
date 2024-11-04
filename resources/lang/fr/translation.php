@@ -29,6 +29,7 @@ return [
     'prompt_key' => 'Quelle est la clé de cette traduction ?',
     'prompt_language' => 'Entrez le code langue que vous aimeriez ajouter (Ex: fr)',
     'prompt_language_for_key' => 'Entrez la langue pour la clé (Ex: fr)',
+    'prompt_name' => 'Entrez le nom de la langue (par exemple anglais)',
     'prompt_type' => 'Est-ce une clé Json ou Array ?',
     'prompt_value' => 'Quelle est la valeur de la traduction',
     'save' => 'Sauvegarder',
