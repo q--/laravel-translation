@@ -50,7 +50,7 @@ class Scanner
                 foreach ($matches[2] as $key) {
                     // Decode php strings, so in the final JSON e.g. __('Don\'t') becomes "Don't" instead of "Don\\'t"
                     $key = stripcslashes($key);
-                    if (preg_match("/(^[a-zA-Z0-9:_-]+([.][^\1)\ ]+)+$)/siU", $key, $arrayMatches)) {
+                    if (preg_match("/(^[a-zA-Z0-9:_-]+([.][^\1)\ ]+)+$)/sU", $key, $arrayMatches)) {
                         [$file, $k] = explode('.', $arrayMatches[0], 2);
                         $results['group'][$file][$k] = '';
                         continue;
