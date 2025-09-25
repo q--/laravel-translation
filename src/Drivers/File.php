@@ -302,7 +302,7 @@ class File extends Translation implements DriverInterface
             $languageFilePath = $vendor !== 'single' ? 'vendor'.DIRECTORY_SEPARATOR."{$vendor}".DIRECTORY_SEPARATOR."{$language}.json" : "{$language}.json";
             $this->disk->put(
                 "{$this->languageFilesPath}".DIRECTORY_SEPARATOR."{$languageFilePath}",
-                json_encode((object) $translations->get($group), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+                json_encode((object) $translations->get($group), JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)
             );
         }
     }
