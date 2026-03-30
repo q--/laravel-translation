@@ -79,7 +79,7 @@ abstract class Translation
      * @return string|null
      * @throws \ErrorException
      */
-    public function getGoogleTranslate($language, $token)
+    public function getGoogleTranslate($language, $token, ?GoogleTranslate $tr = null)
     {
         $placeholderRegex = '/:([a-zA-Z0-9_]+)/';
 
@@ -104,7 +104,7 @@ abstract class Translation
         $modifiedToken = str_replace($placeholders, $tempStrings, $modifiedToken);
 
         // Step 3: Translate the modified text using Google Translate
-        $tr = new GoogleTranslate($language, $this->sourceLanguage);
+        $tr ??= new GoogleTranslate($language, $this->sourceLanguage);
         //In Laravel, | is used to separate pluralization variants.
         //Translate each of these separately to prevent Google Translate mixing them up.
         $translated = [];
@@ -148,6 +148,7 @@ abstract class Translation
         }
 
         $translations = $this->getSourceLanguageTranslationsWith($language);
+        $tr = new GoogleTranslate($language, $this->sourceLanguage);
 
         foreach ($translations as $type => $groups) {
             foreach ($groups as $group => $translations) {
@@ -158,7 +159,7 @@ abstract class Translation
                     $targetLanguageValue = $value[$language];
 
                     if (in_array($targetLanguageValue, ["", null])) {
-                        $new_value = $this->getGoogleTranslate($language, $sourceLanguageValue);
+                        $new_value = $this->getGoogleTranslate($language, $sourceLanguageValue, $tr);
                         if (Str::contains($group, 'single')) {
                             $this->addSingleTranslation($language, $group, $key, $new_value);
                         } else {
