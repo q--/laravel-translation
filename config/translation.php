@@ -60,6 +60,32 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Auto-translate settings
+    |--------------------------------------------------------------------------
+    |
+    | Configure the parallel translation and proxy pool behaviour.
+    |
+    */
+    'auto_translate' => [
+        // Max languages translated simultaneously (each uses a separate proxy)
+        'concurrency' => 10,
+
+        // Path to the SQLite file that stores proxy state.
+        // null = user-level default (~/.config/laravel-translation/proxies.sqlite)
+        'proxy_store_path' => null,
+
+        // Minimum number of working proxies to have before starting parallel work
+        'proxy_min_pool' => 5,
+
+        // Mark a proxy as dead after this many consecutive failures
+        'proxy_fail_limit' => 3,
+
+        // Timeout in seconds when testing or using a proxy
+        'proxy_timeout_sec' => 5,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Database settings
     |--------------------------------------------------------------------------
     |

@@ -83,7 +83,67 @@ abstract class Translation
     }
 
     /**
-     * Translate text using Google Translate
+     * Run the scanner and return raw translations array.
+     */
+    public function scanForTranslations(): array
+    {
+        return $this->scanner->findTranslations();
+    }
+
+    public function getSourceLanguage(): string
+    {
+        return $this->sourceLanguage;
+    }
+
+    /**
+     * Replace :placeholders in a token with temporary fake URLs safe to send through Google Translate.
+     *
+     * Returns [$modifiedToken, $placeholders, $tempStrings].
+     */
+    private function applyPlaceholders(string $language, string $token): array
+    {
+        preg_match_all('/:([a-zA-Z0-9_]+)/', $token, $matches);
+        $placeholders = $matches[0];
+        $tempStrings = [];
+        foreach ($placeholders as $index => $placeholder) {
+            // After experiments, fake URLs survive Google Translate best.
+            // Newar (new) converts digits to Newar script, so we use letters there.
+            $tempStrings[] = 'https://t.co/' . (
+                $language === 'new'
+                    ? mb_strtoupper(base_convert($index + 10, 10, 36))
+                    : $index
+            );
+        }
+
+        return [str_replace($placeholders, $tempStrings, $token), $placeholders, $tempStrings];
+    }
+
+    /**
+     * Restore :placeholders from temporary fake URLs in translated text.
+     * Emits a STDERR warning if placeholder count changed.
+     */
+    private function restorePlaceholders(string $text, array $placeholders, array $tempStrings, string $language, string $originalToken): string
+    {
+        $text = str_ireplace($tempStrings, $placeholders, $text);
+
+        preg_match_all('/:([a-zA-Z0-9_]+)/', $text, $translatedMatches);
+        if (count($translatedMatches[0]) !== count($placeholders)) {
+            fwrite(STDERR, sprintf(
+                "Warning: Placeholder count mismatch in translated text when translating %s to %s.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s\n",
+                $this->sourceLanguage,
+                $language,
+                $originalToken,
+                $text,
+                json_encode($placeholders),
+                json_encode($translatedMatches[0])
+            ));
+        }
+
+        return $text;
+    }
+
+    /**
+     * Translate text using Google Translate (single string, public API for backwards compat).
      *
      * @param $language
      * @param $token
@@ -92,34 +152,14 @@ abstract class Translation
      */
     public function getGoogleTranslate($language, $token, ?GoogleTranslate $tr = null)
     {
-        $placeholderRegex = '/:([a-zA-Z0-9_]+)/';
+        [$modifiedToken, $placeholders, $tempStrings] = $this->applyPlaceholders($language, $token);
 
-        // Step 1: Identify placeholders
-        preg_match_all($placeholderRegex, $token, $matches);
-        $placeholders = $matches[0];
-
-        // Step 2: Replace placeholders with temporary unique strings
-        $modifiedToken = $token;
-        $tempStrings = [];
-        foreach ($placeholders as $index => $placeholder) {
-            //After some experiments, I found fake URLs were most likely to be left intact by Google Translate
-            $tempStrings[] = 'https://t.co/' .
-                //Use letters instead of numbers for Newar, because Google Translate converts the numbers to Newar script
-                ($language === 'new' ?
-                    mb_strtoupper(base_convert($index+10, 10, 36))
-                    :
-                    //Letters break in other languages, for all other languages we'll use numbers
-                    $index
-                );
-        }
-        $modifiedToken = str_replace($placeholders, $tempStrings, $modifiedToken);
-
-        // Step 3: Translate the modified text using Google Translate
         $tr ??= new GoogleTranslate($language, $this->sourceLanguage);
-        //In Laravel, | is used to separate pluralization variants.
-        //Translate each of these separately to prevent Google Translate mixing them up.
+
+        // In Laravel, | separates pluralization variants — translate each separately
+        // so Google Translate doesn't mix them up.
         $translated = [];
-        foreach(explode('|', $modifiedToken) AS $translatableText){
+        foreach (explode('|', $modifiedToken) as $translatableText) {
             $piece = $tr->translate($translatableText);
             // Escape any pipe in the translated output so Laravel doesn't mistake
             // it for a pluralization separator (convention: \| means a literal pipe).
@@ -127,26 +167,201 @@ abstract class Translation
         }
         $translatedText = implode('|', $translated);
 
-        // Step 4: Replace the temporary unique strings back with the original placeholders
-        //Note: we're using case-insensitive replace because Google Translate sometimes uppercases the temp string
-        $translatedText = str_ireplace($tempStrings, $placeholders, $translatedText);
+        return $this->restorePlaceholders($translatedText, $placeholders, $tempStrings, $language, $token);
+    }
 
-        // Step 5: Check if the number of placeholders has stayed the same
-        preg_match_all($placeholderRegex, $translatedText, $translatedMatches);
-        if (count($translatedMatches[0]) !== count($placeholders)) {
-            // Print a warning to stderr
-            fwrite(STDERR, sprintf(
-                "Warning: Placeholder count mismatch in translated text when translating %s to %s.\nOriginal text: %s\nTranslated text: %s\nExpected placeholders: %s\nActual placeholders: %s\n",
-                $this->sourceLanguage,
-                $language,
-                $token,
-                $translatedText,
-                json_encode($placeholders),
-                json_encode($translatedMatches[0])
-            ));
+    /**
+     * Translate a single chunk of items with one Google Translate call.
+     * Falls back to individual calls if the batch split produces unexpected results.
+     * Each item must have 'variants' (array of strings), 'placeholders', 'tempStrings', 'token' (original).
+     * Returns the same array with 'translated' => string set on each item.
+     */
+    private function translateBatchChunk(array $chunk, string $language, GoogleTranslate $tr): array
+    {
+        // Build the combined text, using indexed URL markers to separate items/variants.
+        $separatorPattern = 'https://bsep.co/%d';
+        $parts = [];
+        $indexMap = []; // maps flat index → [item index, variant index]
+        $flatIndex = 0;
+
+        foreach ($chunk as $itemIndex => $item) {
+            foreach ($item['variants'] as $variantIndex => $variant) {
+                $parts[] = $variant;
+                $indexMap[$flatIndex] = [$itemIndex, $variantIndex];
+                $flatIndex++;
+            }
         }
 
-        return $translatedText;
+        // Interleave with separator URLs
+        $combined = '';
+        foreach ($parts as $i => $part) {
+            if ($i > 0) {
+                $combined .= "\n\n" . sprintf($separatorPattern, $i) . "\n\n";
+            }
+            $combined .= $part;
+        }
+
+        $translatedCombined = $tr->translate($combined);
+
+        // Split by the separator URLs (case-insensitive — Google Translate may change case)
+        $splitParts = preg_split(
+            '/\s*https?:\/\/bsep\.co\/\d+\s*/i',
+            $translatedCombined
+        );
+
+        // If split count doesn't match, fall back to individual calls
+        if (count($splitParts) !== count($parts)) {
+            foreach ($chunk as &$item) {
+                $translatedVariants = [];
+                foreach ($item['variants'] as $variant) {
+                    $piece = $tr->translate($variant);
+                    $translatedVariants[] = str_replace('|', '\\|', $piece);
+                }
+                $item['translated'] = $translatedVariants;
+            }
+            unset($item);
+
+            return $chunk;
+        }
+
+        // Assign translated variants back to each item
+        $resultsByItem = [];
+        foreach ($splitParts as $flatIdx => $translatedPart) {
+            [$itemIndex, $variantIndex] = $indexMap[$flatIdx];
+            $resultsByItem[$itemIndex][$variantIndex] = str_replace('|', '\\|', trim($translatedPart));
+        }
+
+        foreach ($chunk as $itemIndex => &$item) {
+            $item['translated'] = $resultsByItem[$itemIndex] ?? array_fill(0, count($item['variants']), '');
+        }
+        unset($item);
+
+        return $chunk;
+    }
+
+    /**
+     * Batch-translate multiple tokens in as few Google Translate HTTP calls as possible.
+     *
+     * Tokens that contain literal newlines cannot be safely batched and are translated individually.
+     * Pluralization variants (| separated) are expanded into separate batch entries.
+     *
+     * Returns an array keyed by the same keys as $tokens with the translated strings as values.
+     *
+     * @param  string  $language  Target language code
+     * @param  array<string, string>  $tokens  Associative array of composite-key => source string
+     * @param  GoogleTranslate  $tr
+     * @return array<string, string>
+     */
+    public function batchTranslate(string $language, array $tokens, GoogleTranslate $tr): array
+    {
+        $batchableItems = [];
+        $individualItems = [];
+
+        foreach ($tokens as $compositeKey => $token) {
+            [$modifiedToken, $placeholders, $tempStrings] = $this->applyPlaceholders($language, $token);
+
+            if (str_contains($modifiedToken, "\n")) {
+                // Can't safely batch strings with literal newlines — translate individually
+                $individualItems[$compositeKey] = [
+                    'token' => $token,
+                    'modifiedToken' => $modifiedToken,
+                    'placeholders' => $placeholders,
+                    'tempStrings' => $tempStrings,
+                ];
+            } else {
+                $variants = explode('|', $modifiedToken);
+                $batchableItems[$compositeKey] = [
+                    'token' => $token,
+                    'variants' => $variants,
+                    'placeholders' => $placeholders,
+                    'tempStrings' => $tempStrings,
+                ];
+            }
+        }
+
+        $results = [];
+
+        // Translate individual (newline-containing) items one by one
+        foreach ($individualItems as $compositeKey => $item) {
+            $translated = [];
+            foreach (explode('|', $item['modifiedToken']) as $variant) {
+                $piece = $tr->translate($variant);
+                $translated[] = str_replace('|', '\\|', $piece);
+            }
+            $joined = implode('|', $translated);
+            $results[$compositeKey] = $this->restorePlaceholders(
+                $joined,
+                $item['placeholders'],
+                $item['tempStrings'],
+                $language,
+                $item['token']
+            );
+        }
+
+        // Chunk batchable items and translate in bulk
+        $chunks = $this->chunkForBatchKeyed($batchableItems);
+
+        foreach ($chunks as $chunk) {
+            $translatedChunk = $this->translateBatchChunk(array_values($chunk), $language, $tr);
+
+            foreach (array_keys($chunk) as $pos => $compositeKey) {
+                $item = $translatedChunk[$pos];
+                $variantStrings = $item['translated'] ?? [];
+                $joined = implode('|', $variantStrings);
+                $results[$compositeKey] = $this->restorePlaceholders(
+                    $joined,
+                    $item['placeholders'],
+                    $item['tempStrings'],
+                    $language,
+                    $item['token']
+                );
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Like chunkForBatch but preserves the string keys of $items.
+     * Returns array of chunks, each chunk being an associative array keyed by composite key.
+     */
+    private function chunkForBatchKeyed(array $items, int $maxChars = 4500): array
+    {
+        $chunks = [];
+        $currentChunk = [];
+        $currentLength = 0;
+
+        foreach ($items as $compositeKey => $item) {
+            $itemText = implode("\n\n", $item['variants']);
+            $itemLength = strlen($itemText);
+
+            if ($itemLength > $maxChars) {
+                if (! empty($currentChunk)) {
+                    $chunks[] = $currentChunk;
+                    $currentChunk = [];
+                    $currentLength = 0;
+                }
+                $chunks[] = [$compositeKey => $item];
+                continue;
+            }
+
+            $separatorLength = empty($currentChunk) ? 0 : strlen("\n\nhttps://bsep.co/0\n\n");
+
+            if ($currentLength + $separatorLength + $itemLength > $maxChars && ! empty($currentChunk)) {
+                $chunks[] = $currentChunk;
+                $currentChunk = [];
+                $currentLength = 0;
+            }
+
+            $currentChunk[$compositeKey] = $item;
+            $currentLength += $separatorLength + $itemLength;
+        }
+
+        if (! empty($currentChunk)) {
+            $chunks[] = $currentChunk;
+        }
+
+        return $chunks;
     }
 
     /**
@@ -154,8 +369,9 @@ abstract class Translation
      *
      * @param $language
      * @param  \Illuminate\Support\Collection|null  $sourceTranslations  Pre-loaded source language translations
+     * @param  GoogleTranslate|null  $tr  Optional pre-configured translator (e.g. with proxy set)
      */
-    public function translateLanguage($language, ?\Illuminate\Support\Collection $sourceTranslations = null)
+    public function translateLanguage($language, ?\Illuminate\Support\Collection $sourceTranslations = null, ?GoogleTranslate $tr = null)
     {
         //No need to translate e.g. English to English
         if ($language === $this->sourceLanguage) {
@@ -163,28 +379,42 @@ abstract class Translation
         }
 
         $translations = $this->getSourceLanguageTranslationsWith($language, $sourceTranslations);
-        $tr = new GoogleTranslate($language, $this->sourceLanguage);
+        $tr ??= new GoogleTranslate($language, $this->sourceLanguage);
+
+        // Collect all strings that need translation, keyed by composite key
+        $tokensToTranslate = [];
+
+        foreach ($translations as $type => $groups) {
+            foreach ($groups as $group => $groupTranslations) {
+                foreach ($groupTranslations as $key => $value) {
+                    // Fall back to $key if source language has no value
+                    $sourceValue = in_array($value[$this->sourceLanguage], ['', null]) ? $key : $value[$this->sourceLanguage];
+                    $targetValue = $value[$language];
+
+                    if (in_array($targetValue, ['', null])) {
+                        // Composite key: type\0group\0key (null byte never appears in translation keys)
+                        $compositeKey = "{$type}\0{$group}\0{$key}";
+                        $tokensToTranslate[$compositeKey] = $sourceValue;
+                    }
+                }
+            }
+        }
+
+        if (empty($tokensToTranslate)) {
+            return;
+        }
+
+        $translated = $this->batchTranslate($language, $tokensToTranslate, $tr);
 
         $pendingGroup = [];
         $pendingSingle = [];
 
-        foreach ($translations as $type => $groups) {
-            foreach ($groups as $group => $translations) {
-                foreach ($translations as $key => $value) {
-                    //Value will be empty if it's found in the app source code but not in the source language files
-                    //We fall back to $key in that case
-                    $sourceLanguageValue = in_array($value[$this->sourceLanguage], ["", null]) ? $key : $value[$this->sourceLanguage];
-                    $targetLanguageValue = $value[$language];
-
-                    if (in_array($targetLanguageValue, ["", null])) {
-                        $new_value = $this->getGoogleTranslate($language, $sourceLanguageValue, $tr);
-                        if (Str::contains($group, 'single')) {
-                            $pendingSingle[$group][$key] = $new_value;
-                        } else {
-                            $pendingGroup[$group][$key] = $new_value;
-                        }
-                    }
-                }
+        foreach ($translated as $compositeKey => $newValue) {
+            [$type, $group, $key] = explode("\0", $compositeKey, 3);
+            if (Str::contains($group, 'single')) {
+                $pendingSingle[$group][$key] = $newValue;
+            } else {
+                $pendingGroup[$group][$key] = $newValue;
             }
         }
 

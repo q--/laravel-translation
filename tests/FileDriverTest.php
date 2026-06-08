@@ -406,4 +406,116 @@ class FileDriverTest extends TestCase
 
         $this->assertSame('One item \||Many items \|', $result);
     }
+
+    /** @test */
+    public function batch_translate_combines_multiple_strings_into_one_call()
+    {
+        $callCount = 0;
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) use (&$callCount) {
+            $callCount++;
+            // Echo back the text (simulating a translation that preserves separators)
+            return $text;
+        });
+
+        $tokens = [
+            'group\0test\0hello' => 'Hello',
+            'group\0test\0world' => 'World',
+            'group\0test\0foo'   => 'Foo',
+        ];
+
+        $results = $this->translation->batchTranslate('es', $tokens, $tr);
+
+        // All three should be batched into a single translate() call
+        $this->assertSame(1, $callCount, 'Expected a single batch translate call');
+        $this->assertArrayHasKey('group\0test\0hello', $results);
+        $this->assertArrayHasKey('group\0test\0world', $results);
+        $this->assertArrayHasKey('group\0test\0foo', $results);
+    }
+
+    /** @test */
+    public function batch_translate_handles_strings_with_newlines_individually()
+    {
+        $calls = [];
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) use (&$calls) {
+            $calls[] = $text;
+
+            return $text;
+        });
+
+        $tokens = [
+            'group\0test\0multiline' => "Line one\nLine two",
+            'group\0test\0normal'    => 'Normal string',
+        ];
+
+        $results = $this->translation->batchTranslate('es', $tokens, $tr);
+
+        // The multiline string must be translated individually (its own call), not batched
+        $multilineTranslated = $results['group\0test\0multiline'] ?? null;
+        $this->assertSame("Line one\nLine two", $multilineTranslated);
+        $this->assertArrayHasKey('group\0test\0normal', $results);
+    }
+
+    /** @test */
+    public function batch_translate_handles_pluralization_variants()
+    {
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) {
+            // Simulate translation: echo text back unchanged
+            return $text;
+        });
+
+        $tokens = [
+            'group\0test\0count' => 'One item|Many items',
+        ];
+
+        $results = $this->translation->batchTranslate('es', $tokens, $tr);
+
+        // Pluralization separator must be preserved in output
+        $this->assertStringContainsString('|', $results['group\0test\0count']);
+    }
+
+    /** @test */
+    public function batch_translate_escapes_pipe_characters_in_batch_mode()
+    {
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) {
+            // Simulate a translation that injects a bare pipe character
+            return $text.' |';
+        });
+
+        $tokens = [
+            'group\0test\0hello' => 'Hello',
+        ];
+
+        $results = $this->translation->batchTranslate('es', $tokens, $tr);
+
+        // The injected | must be escaped so Laravel doesn't treat it as a pluralization separator
+        $this->assertStringContainsString('\\|', $results['group\0test\0hello']);
+    }
+
+    /** @test */
+    public function batch_translate_falls_back_to_individual_calls_when_batch_split_fails()
+    {
+        $individualCallCount = 0;
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) use (&$individualCallCount) {
+            $individualCallCount++;
+            // Remove the separator URL so split produces wrong count, forcing per-item fallback
+            return preg_replace('/https?:\/\/bsep\.co\/\d+/i', '', $text);
+        });
+
+        $tokens = [
+            'group\0test\0a' => 'Apple',
+            'group\0test\0b' => 'Banana',
+        ];
+
+        $results = $this->translation->batchTranslate('es', $tokens, $tr);
+
+        // Fallback path: 1 batch attempt (which fails) + 1 call per item = 3 total
+        $this->assertSame(3, $individualCallCount);
+        $this->assertArrayHasKey('group\0test\0a', $results);
+        $this->assertArrayHasKey('group\0test\0b', $results);
+    }
 }

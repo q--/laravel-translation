@@ -8,6 +8,7 @@ use JoeDixon\Translation\Console\Commands\AddLanguageCommand;
 use JoeDixon\Translation\Console\Commands\AddTranslationKeyCommand;
 use JoeDixon\Translation\Console\Commands\AutoTranslateKeysCommand;
 use JoeDixon\Translation\Console\Commands\ListLanguagesCommand;
+use JoeDixon\Translation\Console\Commands\TranslateLanguageCommand;
 use JoeDixon\Translation\Console\Commands\ListMissingTranslationKeys;
 use JoeDixon\Translation\Console\Commands\SynchroniseMissingTranslationKeys;
 use JoeDixon\Translation\Console\Commands\SynchroniseTranslationsCommand;
@@ -153,6 +154,7 @@ class TranslationServiceProvider extends ServiceProvider
                 SynchroniseMissingTranslationKeys::class,
                 SynchroniseTranslationsCommand::class,
                 AutoTranslateKeysCommand::class,
+                TranslateLanguageCommand::class,
             ]);
         }
     }
