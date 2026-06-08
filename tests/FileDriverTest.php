@@ -9,6 +9,7 @@ use JoeDixon\Translation\Exceptions\LanguageExistsException;
 use JoeDixon\Translation\TranslationBindingsServiceProvider;
 use JoeDixon\Translation\TranslationServiceProvider;
 use Orchestra\Testbench\TestCase;
+use Stichoza\GoogleTranslate\GoogleTranslate;
 
 class FileDriverTest extends TestCase
 {
@@ -376,5 +377,33 @@ class FileDriverTest extends TestCase
             app()['path.lang'].'/en/test.php',
             "<?php\n\nreturn ".var_export(['hello' => 'Hello', 'whats_up' => 'What\'s up!'], true).';'.\PHP_EOL
         );
+    }
+
+    /** @test */
+    public function pipe_characters_in_google_translate_output_are_escaped()
+    {
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) {
+            // Simulate a language (e.g. Odia) that ends sentences with |
+            return $text.' |';
+        });
+
+        $result = $this->translation->getGoogleTranslate('or', 'Hello', $tr);
+
+        $this->assertSame('Hello \|', $result);
+    }
+
+    /** @test */
+    public function pipe_characters_in_google_translate_output_are_escaped_in_plural_strings()
+    {
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) {
+            return $text.' |';
+        });
+
+        // Source string has a pluralization separator; each variant gets its translated | escaped
+        $result = $this->translation->getGoogleTranslate('or', 'One item|Many items', $tr);
+
+        $this->assertSame('One item \||Many items \|', $result);
     }
 }

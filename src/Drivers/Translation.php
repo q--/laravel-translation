@@ -120,7 +120,10 @@ abstract class Translation
         //Translate each of these separately to prevent Google Translate mixing them up.
         $translated = [];
         foreach(explode('|', $modifiedToken) AS $translatableText){
-            $translated[] = $tr->translate($translatableText);
+            $piece = $tr->translate($translatableText);
+            // Escape any pipe in the translated output so Laravel doesn't mistake
+            // it for a pluralization separator (convention: \| means a literal pipe).
+            $translated[] = str_replace('|', '\\|', $piece);
         }
         $translatedText = implode('|', $translated);
 
