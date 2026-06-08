@@ -91,10 +91,14 @@ class AutoTranslateKeysCommand extends BaseCommand
         $artisan = base_path('artisan');
 
         $queue = $languages;
-        $running = []; // proxy => Process
+        $running = []; // proxy => ['process', 'language']
         $failed = [];
-        $maxRetries = 3;
+        // One retry only: a second proxy failure means the language goes to the sequential queue
+        // rather than burning more boot-cost attempts. Sequential queue is drained after the
+        // parallel loop so it never blocks the poll cycle.
+        $maxRetries = 1;
         $retryCount = [];
+        $sequentialQueue = []; // languages to translate sequentially after parallel loop
 
         while (! empty($queue) || ! empty($running)) {
             // Start new workers up to concurrency limit
@@ -103,19 +107,14 @@ class AutoTranslateKeysCommand extends BaseCommand
                 $proxy = $pool->acquire();
 
                 if (! $proxy) {
-                    // No proxy available — translate this one sequentially
-                    $this->line("Translating {$lang} (no proxy available)...");
-                    try {
-                        $this->translation->translateLanguage($lang);
-                        fwrite(STDOUT, __('translation::translation.auto_translated_language', ['language' => $lang]) . PHP_EOL);
-                    } catch (\Throwable $e) {
-                        $this->error("Failed to translate {$lang}: " . $e->getMessage());
-                    }
+                    // No proxy available — defer to sequential queue
+                    $sequentialQueue[] = $lang;
                     continue;
                 }
 
                 $process = new Process([$phpBinary, $artisan, 'translation:translate-language', $lang, '--proxy=' . $proxy]);
-                $process->setTimeout(300);
+                // Worker timeout: connect_timeout (5s) + translation timeout (30s) + boot (~15s) + headroom
+                $process->setTimeout(60);
                 $process->start();
                 $running[$proxy] = ['process' => $process, 'language' => $lang];
             }
@@ -139,7 +138,7 @@ class AutoTranslateKeysCommand extends BaseCommand
                         $pool->reportSuccess($proxy);
                         fwrite(STDOUT, __('translation::translation.auto_translated_language', ['language' => $lang]) . PHP_EOL);
                     } elseif ($exitCode === 2) {
-                        // Proxy failure — mark and retry with different proxy
+                        // Proxy failure — mark and retry once, then defer to sequential
                         $pool->reportFailure($proxy);
                         $retries = ($retryCount[$lang] ?? 0) + 1;
                         $retryCount[$lang] = $retries;
@@ -147,19 +146,27 @@ class AutoTranslateKeysCommand extends BaseCommand
                         if ($retries < $maxRetries) {
                             $queue[] = $lang;
                         } else {
-                            $this->warn("Giving up on {$lang} after {$maxRetries} proxy failures; trying sequentially...");
-                            try {
-                                $this->translation->translateLanguage($lang);
-                                fwrite(STDOUT, __('translation::translation.auto_translated_language', ['language' => $lang]) . PHP_EOL);
-                            } catch (\Throwable $e) {
-                                $this->error("Failed to translate {$lang}: " . $e->getMessage());
-                                $failed[] = $lang;
-                            }
+                            $sequentialQueue[] = $lang;
                         }
                     } else {
                         $this->error("Failed to translate {$lang} (exit {$exitCode}): " . $process->getErrorOutput());
                         $failed[] = $lang;
                     }
+                }
+            }
+        }
+
+        // Drain languages that couldn't use a proxy sequentially, after the parallel loop
+        // so they never block worker slots.
+        if (! empty($sequentialQueue)) {
+            $this->line(sprintf("Translating %d language(s) sequentially (proxy unavailable or failed)...", count($sequentialQueue)));
+            foreach ($sequentialQueue as $lang) {
+                try {
+                    $this->translation->translateLanguage($lang);
+                    fwrite(STDOUT, __('translation::translation.auto_translated_language', ['language' => $lang]) . PHP_EOL);
+                } catch (\Throwable $e) {
+                    $this->error("Failed to translate {$lang}: " . $e->getMessage());
+                    $failed[] = $lang;
                 }
             }
         }

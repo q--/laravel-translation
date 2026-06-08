@@ -23,7 +23,11 @@ class TranslateLanguageCommand extends BaseCommand
             $tr = new GoogleTranslate($language, $this->translation->getSourceLanguage());
 
             if ($proxy) {
-                $tr->setOptions(['proxy' => $proxy]);
+                $tr->setOptions([
+                    'proxy'           => $proxy,
+                    'connect_timeout' => 5,
+                    'timeout'         => 30,
+                ]);
             }
 
             $this->translation->translateLanguage($language, null, $tr);
@@ -32,13 +36,8 @@ class TranslateLanguageCommand extends BaseCommand
         } catch (\Throwable $e) {
             $message = $e->getMessage();
 
-            // Proxy-related errors get exit code 2 so the parent can retry with a different proxy
-            if ($proxy && (
-                str_contains($message, 'proxy') ||
-                str_contains($message, 'curl') ||
-                str_contains($message, 'connect') ||
-                str_contains($message, '407')
-            )) {
+            // Any error when using a proxy gets exit code 2 so the parent retries with a different proxy
+            if ($proxy) {
                 $this->error("Proxy error ({$proxy}): {$message}");
 
                 return 2;
