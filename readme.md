@@ -203,12 +203,46 @@ run for all languages or a single language.
 ### Automated Translation Using [Stichoza Google Translate Package](https://github.com/Stichoza/google-translate-php)   
 
 ```
-translation:auto-translate
+translation:auto-translate [language] [--concurrency=10] [--no-proxy]
 ```
 This command will scan your project (using the paths supplied in the
 configuration file) and create all of the missing translation keys. This can be
 run for all languages or a single language.
 
-It will then translate all the tokens using Google Translate for FREE!
+It will then translate all the tokens using Google Translate for FREE! Multiple
+strings are batched into a single HTTP call per language to minimise round-trips.
+
+**Parallel translation with automatic proxy rotation**
+
+When translating many languages at once (the default), the command spawns up to
+`--concurrency` worker processes (default: 10) and rotates through a pool of
+free HTTP proxies so that each worker uses a distinct IP address. This avoids
+Google Translate rate-limiting when running against many target languages.
+
+The proxy pool is backed by a user-level SQLite database
+(`~/.config/laravel-translation/proxies.sqlite` on Linux/Mac,
+`%APPDATA%\laravel-translation\proxies.sqlite` on Windows). Proxies are fetched
+from [ProxyScrape](https://proxyscrape.com/) and validated before use. Proxies
+that fail `proxy_fail_limit` times are marked dead and replaced automatically.
+
+Pass `--no-proxy` to disable the proxy pool and translate sequentially (useful
+for a single language or in environments where outbound proxy traffic is
+blocked).
+
+Proxy pool settings can be tuned in `config/translation.php` under
+`auto_translate`:
+
+```php
+'auto_translate' => [
+    'concurrency'       => 10,
+    'proxy_store_path'  => null,   // null = user-level default
+    'proxy_min_pool'    => 5,
+    'proxy_fail_limit'  => 3,
+    'proxy_timeout_sec' => 5,
+],
+```
+
+> **Requirements:** The `pdo_sqlite` PHP extension must be enabled for the proxy
+> pool to work.
 
 You can edit these the auto translated texts using the [User interface](#user-interface) 
