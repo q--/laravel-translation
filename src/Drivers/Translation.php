@@ -15,12 +15,13 @@ abstract class Translation
      * Find all of the translations in the app without translation for a given language.
      *
      * @param  string  $language
+     * @param  array|null  $scannedTranslations  Pre-computed scan result to avoid redundant scanning
      * @return array
      */
-    public function findMissingTranslations($language)
+    public function findMissingTranslations($language, ?array $scannedTranslations = null)
     {
         return array_diff_assoc_recursive(
-            $this->scanner->findTranslations(),
+            $scannedTranslations ?? $this->scanner->findTranslations(),
             $this->allTranslationsFor($language)
         );
     }
@@ -29,26 +30,32 @@ abstract class Translation
      * Save all of the translations in the app without translation for a given language.
      *
      * @param  string  $language
+     * @param  array|null  $scannedTranslations  Pre-computed scan result to avoid redundant scanning
      * @return void
      */
-    public function saveMissingTranslations($language = false)
+    public function saveMissingTranslations($language = false, ?array $scannedTranslations = null)
     {
         $languages = $language ? [$language => $language] : $this->allLanguages();
 
         foreach ($languages as $language => $name) {
-            $missingTranslations = $this->findMissingTranslations($language);
+            $missingTranslations = $this->findMissingTranslations($language, $scannedTranslations);
+
+            $pendingGroup = [];
+            $pendingSingle = [];
 
             foreach ($missingTranslations as $type => $groups) {
                 foreach ($groups as $group => $translations) {
                     foreach ($translations as $key => $value) {
                         if (Str::contains($group, 'single')) {
-                            $this->addSingleTranslation($language, $group, $key);
+                            $pendingSingle[$group][$key] = '';
                         } else {
-                            $this->addGroupTranslation($language, $group, $key);
+                            $pendingGroup[$group][$key] = '';
                         }
                     }
                 }
             }
+
+            $this->batchAddTranslations($language, $pendingGroup, $pendingSingle);
         }
     }
 
@@ -63,9 +70,13 @@ abstract class Translation
     {
         $languages = $language ? [$language => $language] : $this->allLanguages();
 
+        // Pre-compute once and reuse across all languages instead of repeating per language.
+        $sourceTranslations = $this->allTranslationsFor($this->sourceLanguage);
+        $scannedTranslations = $this->scanner->findTranslations();
+
         foreach ($languages as $language => $name) {
-            $this->saveMissingTranslations($language);
-            $this->translateLanguage($language);
+            $this->saveMissingTranslations($language, $scannedTranslations);
+            $this->translateLanguage($language, $sourceTranslations);
             //Inform the user of what language we just finished translating
             fwrite(STDOUT, __('translation::translation.auto_translated_language', ['language' => $language]) . PHP_EOL);
         }
@@ -139,16 +150,20 @@ abstract class Translation
      * Loop through all the keys and get translated text from Google Translate
      *
      * @param $language
+     * @param  \Illuminate\Support\Collection|null  $sourceTranslations  Pre-loaded source language translations
      */
-    public function translateLanguage($language)
+    public function translateLanguage($language, ?\Illuminate\Support\Collection $sourceTranslations = null)
     {
         //No need to translate e.g. English to English
         if ($language === $this->sourceLanguage) {
             return;
         }
 
-        $translations = $this->getSourceLanguageTranslationsWith($language);
+        $translations = $this->getSourceLanguageTranslationsWith($language, $sourceTranslations);
         $tr = new GoogleTranslate($language, $this->sourceLanguage);
+
+        $pendingGroup = [];
+        $pendingSingle = [];
 
         foreach ($translations as $type => $groups) {
             foreach ($groups as $group => $translations) {
@@ -161,13 +176,32 @@ abstract class Translation
                     if (in_array($targetLanguageValue, ["", null])) {
                         $new_value = $this->getGoogleTranslate($language, $sourceLanguageValue, $tr);
                         if (Str::contains($group, 'single')) {
-                            $this->addSingleTranslation($language, $group, $key, $new_value);
+                            $pendingSingle[$group][$key] = $new_value;
                         } else {
-                            $this->addGroupTranslation($language, $group, $key, $new_value);
+                            $pendingGroup[$group][$key] = $new_value;
                         }
                     }
-
                 }
+            }
+        }
+
+        $this->batchAddTranslations($language, $pendingGroup, $pendingSingle);
+    }
+
+    /**
+     * Save a batch of translations for a language. The default implementation calls the individual
+     * add methods one by one. Drivers can override this for more efficient batch I/O.
+     */
+    protected function batchAddTranslations(string $language, array $pendingGroup, array $pendingSingle): void
+    {
+        foreach ($pendingGroup as $group => $keys) {
+            foreach ($keys as $key => $value) {
+                $this->addGroupTranslation($language, $group, $key, $value);
+            }
+        }
+        foreach ($pendingSingle as $group => $keys) {
+            foreach ($keys as $key => $value) {
+                $this->addSingleTranslation($language, $group, $key, $value);
             }
         }
     }
@@ -176,11 +210,12 @@ abstract class Translation
      * Get all translations for a given language merged with the source language.
      *
      * @param  string  $language
+     * @param  \Illuminate\Support\Collection|null  $sourceTranslations  Pre-loaded source language translations
      * @return Collection
      */
-    public function getSourceLanguageTranslationsWith($language)
+    public function getSourceLanguageTranslationsWith($language, ?\Illuminate\Support\Collection $sourceTranslations = null)
     {
-        $sourceTranslations = $this->allTranslationsFor($this->sourceLanguage);
+        $sourceTranslations = $sourceTranslations ?? $this->allTranslationsFor($this->sourceLanguage);
         $languageTranslations = $this->allTranslationsFor($language);
 
         return $sourceTranslations->map(function ($groups, $type) use ($language, $languageTranslations) {
