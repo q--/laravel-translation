@@ -248,6 +248,51 @@ class File extends Translation implements DriverInterface
     }
 
     /**
+     * Efficient batch save: one disk read per language instead of one per key.
+     */
+    protected function batchAddTranslations(string $language, array $pendingGroup, array $pendingSingle): void
+    {
+        if (empty($pendingGroup) && empty($pendingSingle)) {
+            return;
+        }
+
+        if (! $this->languageExists($language)) {
+            $this->addLanguage($language);
+        }
+
+        if (! empty($pendingGroup)) {
+            $existing = $this->getGroupTranslationsFor($language);
+
+            foreach ($pendingGroup as $group => $newKeys) {
+                if (! $existing->keys()->contains($group)) {
+                    $existing->put($group, collect());
+                }
+                $values = $existing->get($group)->toArray();
+                foreach ($newKeys as $key => $value) {
+                    $values[$key] = $value;
+                }
+                $existing->put($group, collect($values));
+                $this->saveGroupTranslations($language, $group, $existing->get($group));
+            }
+        }
+
+        if (! empty($pendingSingle)) {
+            $existing = $this->getSingleTranslationsFor($language);
+
+            foreach ($pendingSingle as $vendor => $newKeys) {
+                if (! $existing->has($vendor)) {
+                    $existing->put($vendor, collect());
+                }
+                foreach ($newKeys as $key => $value) {
+                    $existing->get($vendor)->put($key, $value);
+                }
+            }
+
+            $this->saveSingleTranslations($language, $existing);
+        }
+    }
+
+    /**
      * Save group type language translations.
      *
      * @param  string  $language
@@ -295,7 +340,7 @@ class File extends Translation implements DriverInterface
      * @param  array  $translations
      * @return void
      */
-    private function saveSingleTranslations($language, $translations)
+    protected function saveSingleTranslations($language, $translations)
     {
         foreach ($translations as $group => $translation) {
             $vendor = Str::before($group, '::single');
