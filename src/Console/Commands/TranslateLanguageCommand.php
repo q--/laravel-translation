@@ -23,7 +23,7 @@ class TranslateLanguageCommand extends BaseCommand
             $tr = new GoogleTranslate($language, $this->translation->getSourceLanguage());
 
             if ($proxy) {
-                $tr->setProxy($proxy);
+                $tr->setOptions(['proxy' => $proxy]);
             }
 
             $this->translation->translateLanguage($language, null, $tr);
