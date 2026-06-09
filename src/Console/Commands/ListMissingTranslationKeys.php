@@ -27,9 +27,10 @@ class ListMissingTranslationKeys extends BaseCommand
     {
         $missingTranslations = [];
         $rows = [];
+        $scannedTranslations = $this->translation->scanForTranslations();
 
         foreach ($this->translation->allLanguages() as $language => $name) {
-            $missingTranslations[$language] = $this->translation->findMissingTranslations($language);
+            $missingTranslations[$language] = $this->translation->findMissingTranslations($language, $scannedTranslations);
         }
 
         // check whether or not there are any missing translations
