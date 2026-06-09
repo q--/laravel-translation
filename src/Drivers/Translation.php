@@ -38,6 +38,8 @@ abstract class Translation
     public function saveMissingTranslations($language = false, ?array $scannedTranslations = null, ?\Illuminate\Support\Collection $targetTranslations = null)
     {
         $languages = $language ? [$language => $language] : $this->allLanguages();
+        // Pre-compute once so the scanner doesn't run once per language when called for all languages.
+        $scannedTranslations ??= $this->scanner->findTranslations();
 
         foreach ($languages as $language => $name) {
             $missingTranslations = $this->findMissingTranslations($language, $scannedTranslations, $targetTranslations);

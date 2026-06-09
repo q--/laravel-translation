@@ -496,6 +496,38 @@ class FileDriverTest extends TestCase
     }
 
     /** @test */
+    public function save_missing_translations_for_all_languages_scans_once(): void
+    {
+        $scanner = $this->createMock(\JoeDixon\Translation\Scanner::class);
+        $scanner->expects($this->once())
+            ->method('findTranslations')
+            ->willReturn(['single' => [], 'group' => []]);
+
+        app()->instance(\JoeDixon\Translation\Scanner::class, $scanner);
+        app()->forgetInstance(Translation::class);
+        $translation = app()->make(Translation::class);
+
+        // Two languages (en + es) in fixtures — scanner must still only run once.
+        $translation->saveMissingTranslations(false);
+    }
+
+    /** @test */
+    public function list_missing_translation_keys_command_scans_once(): void
+    {
+        $scanner = $this->createMock(\JoeDixon\Translation\Scanner::class);
+        $scanner->expects($this->once())
+            ->method('findTranslations')
+            ->willReturn(['single' => [], 'group' => []]);
+
+        app()->instance(\JoeDixon\Translation\Scanner::class, $scanner);
+        app()->forgetInstance(Translation::class);
+
+        // Two languages (en + es) in fixtures — scanner must still only run once.
+        $this->artisan('translation:list-missing-translation-keys')
+            ->assertExitCode(0);
+    }
+
+    /** @test */
     public function batch_translate_falls_back_to_individual_calls_when_batch_split_fails()
     {
         $individualCallCount = 0;
