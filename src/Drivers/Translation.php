@@ -16,13 +16,14 @@ abstract class Translation
      *
      * @param  string  $language
      * @param  array|null  $scannedTranslations  Pre-computed scan result to avoid redundant scanning
+     * @param  \Illuminate\Support\Collection|null  $targetTranslations  Pre-loaded translations for $language
      * @return array
      */
-    public function findMissingTranslations($language, ?array $scannedTranslations = null)
+    public function findMissingTranslations($language, ?array $scannedTranslations = null, ?\Illuminate\Support\Collection $targetTranslations = null)
     {
         return array_diff_assoc_recursive(
             $scannedTranslations ?? $this->scanner->findTranslations(),
-            $this->allTranslationsFor($language)
+            $targetTranslations ?? $this->allTranslationsFor($language)
         );
     }
 
@@ -31,14 +32,15 @@ abstract class Translation
      *
      * @param  string  $language
      * @param  array|null  $scannedTranslations  Pre-computed scan result to avoid redundant scanning
+     * @param  \Illuminate\Support\Collection|null  $targetTranslations  Pre-loaded translations for $language (only used when $language is a specific language, not false)
      * @return void
      */
-    public function saveMissingTranslations($language = false, ?array $scannedTranslations = null)
+    public function saveMissingTranslations($language = false, ?array $scannedTranslations = null, ?\Illuminate\Support\Collection $targetTranslations = null)
     {
         $languages = $language ? [$language => $language] : $this->allLanguages();
 
         foreach ($languages as $language => $name) {
-            $missingTranslations = $this->findMissingTranslations($language, $scannedTranslations);
+            $missingTranslations = $this->findMissingTranslations($language, $scannedTranslations, $targetTranslations);
 
             $pendingGroup = [];
             $pendingSingle = [];
@@ -75,8 +77,9 @@ abstract class Translation
         $scannedTranslations = $this->scanner->findTranslations();
 
         foreach ($languages as $language => $name) {
-            $this->saveMissingTranslations($language, $scannedTranslations);
-            $this->translateLanguage($language, $sourceTranslations);
+            $targetTranslations = $this->allTranslationsFor($language);
+            $this->saveMissingTranslations($language, $scannedTranslations, $targetTranslations);
+            $this->translateLanguage($language, $sourceTranslations, null, $targetTranslations);
             //Inform the user of what language we just finished translating
             fwrite(STDOUT, __('translation::translation.auto_translated_language', ['language' => $language]) . PHP_EOL);
         }
@@ -370,15 +373,16 @@ abstract class Translation
      * @param $language
      * @param  \Illuminate\Support\Collection|null  $sourceTranslations  Pre-loaded source language translations
      * @param  GoogleTranslate|null  $tr  Optional pre-configured translator (e.g. with proxy set)
+     * @param  \Illuminate\Support\Collection|null  $targetTranslations  Pre-loaded translations for $language
      */
-    public function translateLanguage($language, ?\Illuminate\Support\Collection $sourceTranslations = null, ?GoogleTranslate $tr = null)
+    public function translateLanguage($language, ?\Illuminate\Support\Collection $sourceTranslations = null, ?GoogleTranslate $tr = null, ?\Illuminate\Support\Collection $targetTranslations = null)
     {
         //No need to translate e.g. English to English
         if ($language === $this->sourceLanguage) {
             return;
         }
 
-        $translations = $this->getSourceLanguageTranslationsWith($language, $sourceTranslations);
+        $translations = $this->getSourceLanguageTranslationsWith($language, $sourceTranslations, $targetTranslations);
         $tr ??= new GoogleTranslate($language, $this->sourceLanguage);
 
         // Collect all strings that need translation, keyed by composite key
@@ -444,12 +448,13 @@ abstract class Translation
      *
      * @param  string  $language
      * @param  \Illuminate\Support\Collection|null  $sourceTranslations  Pre-loaded source language translations
+     * @param  \Illuminate\Support\Collection|null  $targetTranslations  Pre-loaded translations for $language
      * @return Collection
      */
-    public function getSourceLanguageTranslationsWith($language, ?\Illuminate\Support\Collection $sourceTranslations = null)
+    public function getSourceLanguageTranslationsWith($language, ?\Illuminate\Support\Collection $sourceTranslations = null, ?\Illuminate\Support\Collection $targetTranslations = null)
     {
         $sourceTranslations = $sourceTranslations ?? $this->allTranslationsFor($this->sourceLanguage);
-        $languageTranslations = $this->allTranslationsFor($language);
+        $languageTranslations = $targetTranslations ?? $this->allTranslationsFor($language);
 
         return $sourceTranslations->map(function ($groups, $type) use ($language, $languageTranslations) {
             return $groups->map(function ($translations, $group) use ($type, $language, $languageTranslations) {
