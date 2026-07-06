@@ -38,6 +38,9 @@ jobs:
           coverage: none
 
       - name: Disable Composer security advisory blocking
+        # Composer 2.7+ blocks packages flagged with security advisories by default.
+        # Laravel 10 and 11 are EOL and all their releases carry open advisories,
+        # so without this every Laravel 10/11 install job would fail to resolve.
         run: composer config policy.advisories.block false
 
       - name: Install Composer dependencies
