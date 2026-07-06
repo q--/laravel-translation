@@ -6,6 +6,7 @@ use JoeDixon\Translation\Scanner;
 use JoeDixon\Translation\TranslationBindingsServiceProvider;
 use JoeDixon\Translation\TranslationServiceProvider;
 use Orchestra\Testbench\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 
 class ScannerTest extends TestCase
 {
@@ -25,7 +26,7 @@ class ScannerTest extends TestCase
         $app['config']->set('translation.translation_methods', ['__', 'trans', 'trans_choice', '@lang', 'Lang::get']);
     }
 
-    /** @test */
+    #[Test]
     public function it_finds_all_translations()
     {
         $this->scanner = app()->make(Scanner::class);
