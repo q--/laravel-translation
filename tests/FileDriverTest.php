@@ -9,6 +9,7 @@ use JoeDixon\Translation\Exceptions\LanguageExistsException;
 use JoeDixon\Translation\TranslationBindingsServiceProvider;
 use JoeDixon\Translation\TranslationServiceProvider;
 use Orchestra\Testbench\TestCase;
+use PHPUnit\Framework\Attributes\Test;
 use Stichoza\GoogleTranslate\GoogleTranslate;
 
 class FileDriverTest extends TestCase
@@ -38,7 +39,7 @@ class FileDriverTest extends TestCase
         $app['config']->set('translation.driver', 'file');
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_all_languages()
     {
         $languages = $this->translation->allLanguages();
@@ -47,7 +48,7 @@ class FileDriverTest extends TestCase
         $this->assertEquals($languages->toArray(), ['en' => 'en', 'es' => 'es']);
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_all_translations()
     {
         $translations = $this->translation->allTranslations();
@@ -58,7 +59,7 @@ class FileDriverTest extends TestCase
         $this->assertArrayHasKey('es', $translations->toArray());
     }
 
-    /** @test */
+    #[Test]
     public function it_returns_all_translations_for_a_given_language()
     {
         $translations = $this->translation->allTranslationsFor('en');
@@ -68,14 +69,14 @@ class FileDriverTest extends TestCase
         $this->assertArrayHasKey('group', $translations->toArray());
     }
 
-    /** @test */
+    #[Test]
     public function it_throws_an_exception_if_a_language_exists()
     {
         $this->expectException(LanguageExistsException::class);
         $this->translation->addLanguage('en');
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_a_new_language()
     {
         $this->translation->addLanguage('fr');
@@ -87,7 +88,7 @@ class FileDriverTest extends TestCase
         unlink(__DIR__.'/fixtures/lang/fr.json');
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_a_new_translation_to_a_new_group()
     {
         $this->translation->addGroupTranslation('es', 'test', 'hello', 'Hola!');
@@ -99,7 +100,7 @@ class FileDriverTest extends TestCase
         unlink(__DIR__.'/fixtures/lang/es/test.php');
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_a_new_translation_to_an_existing_translation_group()
     {
         $this->translation->addGroupTranslation('en', 'test', 'test', 'Testing');
@@ -114,7 +115,7 @@ class FileDriverTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_a_new_single_translation()
     {
         $this->translation->addSingleTranslation('es', 'single', 'Hello', 'Hola!');
@@ -126,7 +127,7 @@ class FileDriverTest extends TestCase
         unlink(__DIR__.'/fixtures/lang/es.json');
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_a_new_single_translation_to_an_existing_language()
     {
         $this->translation->addSingleTranslation('en', 'single', 'Test', 'Testing');
@@ -141,7 +142,7 @@ class FileDriverTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function it_can_get_a_collection_of_group_names_for_a_given_language()
     {
         $groups = $this->translation->getGroupsFor('en');
@@ -149,7 +150,7 @@ class FileDriverTest extends TestCase
         $this->assertEquals($groups->toArray(), ['test']);
     }
 
-    /** @test */
+    #[Test]
     public function it_can_merge_a_language_with_the_base_language()
     {
         $this->translation->addGroupTranslation('es', 'test', 'hello', 'Hola!');
@@ -179,7 +180,7 @@ class FileDriverTest extends TestCase
         unlink(__DIR__.'/fixtures/lang/es/test.php');
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_a_vendor_namespaced_translations()
     {
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'hello', 'Hola!');
@@ -196,7 +197,7 @@ class FileDriverTest extends TestCase
         \File::deleteDirectory(__DIR__.'/fixtures/lang/vendor');
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_a_nested_translation()
     {
         $this->translation->addGroupTranslation('en', 'test', 'test.nested', 'Nested!');
@@ -215,7 +216,7 @@ class FileDriverTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function it_can_add_nested_vendor_namespaced_translations()
     {
         $this->translation->addGroupTranslation('es', 'translation_test::test', 'nested.hello', 'Hola!');
@@ -232,7 +233,7 @@ class FileDriverTest extends TestCase
         \File::deleteDirectory(__DIR__.'/fixtures/lang/vendor');
     }
 
-    /** @test */
+    #[Test]
     public function it_can_merge_a_namespaced_language_with_the_base_language()
     {
         $this->translation->addGroupTranslation('en', 'translation_test::test', 'hello', 'Hello');
@@ -266,21 +267,21 @@ class FileDriverTest extends TestCase
         \File::deleteDirectory(__DIR__.'/fixtures/lang/vendor');
     }
 
-    /** @test */
+    #[Test]
     public function a_list_of_languages_can_be_viewed()
     {
         $this->get(config('translation.ui_url'))
             ->assertSee('en');
     }
 
-    /** @test */
+    #[Test]
     public function the_language_creation_page_can_be_viewed()
     {
         $this->get(config('translation.ui_url').'/create')
             ->assertSee('Add a new language');
     }
 
-    /** @test */
+    #[Test]
     public function a_language_can_be_added()
     {
         $this->post(config('translation.ui_url'), ['locale' => 'de'])
@@ -293,7 +294,7 @@ class FileDriverTest extends TestCase
         unlink(__DIR__.'/fixtures/lang/de.json');
     }
 
-    /** @test */
+    #[Test]
     public function a_list_of_translations_can_be_viewed()
     {
         $this->get(config('translation.ui_url').'/en/translations')
@@ -301,14 +302,14 @@ class FileDriverTest extends TestCase
             ->assertSee('whats_up');
     }
 
-    /** @test */
+    #[Test]
     public function the_translation_creation_page_can_be_viewed()
     {
         $this->get(config('translation.ui_url').'/'.config('app.locale').'/translations/create')
             ->assertSee('Add a translation');
     }
 
-    /** @test */
+    #[Test]
     public function a_new_translation_can_be_added()
     {
         $this->post(config('translation.ui_url').'/en/translations', ['key' => 'joe', 'value' => 'is cool'])
@@ -323,7 +324,7 @@ class FileDriverTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function a_translation_can_be_updated()
     {
         $this->post(config('translation.ui_url').'/en', ['group' => 'test', 'key' => 'hello', 'value' => 'Hello there!'])
@@ -339,7 +340,7 @@ class FileDriverTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function adding_a_translation_fires_an_event_with_the_expected_data()
     {
         Event::fake();
@@ -359,7 +360,7 @@ class FileDriverTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function updating_a_translation_fires_an_event_with_the_expected_data()
     {
         Event::fake();
@@ -379,7 +380,7 @@ class FileDriverTest extends TestCase
         );
     }
 
-    /** @test */
+    #[Test]
     public function pipe_characters_in_google_translate_output_are_escaped()
     {
         $tr = $this->createMock(GoogleTranslate::class);
@@ -393,7 +394,7 @@ class FileDriverTest extends TestCase
         $this->assertSame('Hello \|', $result);
     }
 
-    /** @test */
+    #[Test]
     public function pipe_characters_in_google_translate_output_are_escaped_in_plural_strings()
     {
         $tr = $this->createMock(GoogleTranslate::class);
@@ -407,7 +408,7 @@ class FileDriverTest extends TestCase
         $this->assertSame('One item \||Many items \|', $result);
     }
 
-    /** @test */
+    #[Test]
     public function batch_translate_combines_multiple_strings_into_one_call()
     {
         $callCount = 0;
@@ -433,7 +434,7 @@ class FileDriverTest extends TestCase
         $this->assertArrayHasKey('group\0test\0foo', $results);
     }
 
-    /** @test */
+    #[Test]
     public function batch_translate_handles_strings_with_newlines_individually()
     {
         $calls = [];
@@ -457,7 +458,7 @@ class FileDriverTest extends TestCase
         $this->assertArrayHasKey('group\0test\0normal', $results);
     }
 
-    /** @test */
+    #[Test]
     public function batch_translate_handles_pluralization_variants()
     {
         $tr = $this->createMock(GoogleTranslate::class);
@@ -476,7 +477,7 @@ class FileDriverTest extends TestCase
         $this->assertStringContainsString('|', $results['group\0test\0count']);
     }
 
-    /** @test */
+    #[Test]
     public function batch_translate_escapes_pipe_characters_in_batch_mode()
     {
         $tr = $this->createMock(GoogleTranslate::class);
@@ -495,7 +496,7 @@ class FileDriverTest extends TestCase
         $this->assertStringContainsString('\\|', $results['group\0test\0hello']);
     }
 
-    /** @test */
+    #[Test]
     public function save_missing_translations_for_all_languages_scans_once(): void
     {
         $scanner = $this->createMock(\JoeDixon\Translation\Scanner::class);
@@ -511,7 +512,7 @@ class FileDriverTest extends TestCase
         $translation->saveMissingTranslations(false);
     }
 
-    /** @test */
+    #[Test]
     public function list_missing_translation_keys_command_scans_once(): void
     {
         $scanner = $this->createMock(\JoeDixon\Translation\Scanner::class);
@@ -527,7 +528,7 @@ class FileDriverTest extends TestCase
             ->assertExitCode(0);
     }
 
-    /** @test */
+    #[Test]
     public function batch_translate_falls_back_to_individual_calls_when_batch_split_fails()
     {
         $individualCallCount = 0;

@@ -2,32 +2,18 @@
 
 namespace JoeDixon\Translation\Rules;
 
-use Illuminate\Contracts\Validation\Rule;
+use Closure;
+use Illuminate\Contracts\Validation\ValidationRule;
 use JoeDixon\Translation\Drivers\Translation;
 
-class LanguageNotExists implements Rule
+class LanguageNotExists implements ValidationRule
 {
-    /**
-     * Determine if the validation rule passes.
-     *
-     * @param  string  $attribute
-     * @param  mixed  $value
-     * @return bool
-     */
-    public function passes($attribute, $value)
+    public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         $translation = app()->make(Translation::class);
 
-        return ! $translation->languageExists($value);
-    }
-
-    /**
-     * Get the validation error message.
-     *
-     * @return string
-     */
-    public function message()
-    {
-        return __('translation::translation.language_exists');
+        if ($translation->languageExists($value)) {
+            $fail(__('translation::translation.language_exists'));
+        }
     }
 }

@@ -6,19 +6,47 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        php: [8.2, 8.3, 8.4]
+        laravel: ['10.*', '11.*', '12.*', '13.*']
+        include:
+          - laravel: '10.*'
+            testbench: '^8.0'
+          - laravel: '11.*'
+            testbench: '^9.0'
+          - laravel: '12.*'
+            testbench: '^10.0'
+          - laravel: '13.*'
+            testbench: '^11.0'
+        exclude:
+          - php: 8.2
+            laravel: '13.*'
+
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: 8.2
+          php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
           coverage: none
 
+      - name: Disable Composer security advisory blocking
+        # Composer 2.7+ blocks packages flagged with security advisories by default.
+        # Laravel 10 and 11 are EOL and all their releases carry open advisories,
+        # so without this every Laravel 10/11 install job would fail to resolve.
+        run: composer config policy.advisories.block false
+
       - name: Install Composer dependencies
-        run: composer install --prefer-dist --no-interaction
+        run: |
+          composer require "laravel/framework:${{ matrix.laravel }}" "orchestra/testbench:${{ matrix.testbench }}" --no-interaction --no-update
+          composer update --prefer-stable --prefer-dist --no-interaction
 
       - name: Execute tests
         run: vendor/bin/phpunit
