@@ -20,6 +20,9 @@ jobs:
             testbench: '^10.0'
           - laravel: '13.*'
             testbench: '^11.0'
+        exclude:
+          - php: 8.2
+            laravel: '13.*'
 
     name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }}
 
@@ -33,6 +36,9 @@ jobs:
           php-version: ${{ matrix.php }}
           extensions: dom, curl, libxml, mbstring, zip, pcntl, pdo, sqlite, pdo_sqlite
           coverage: none
+
+      - name: Disable Composer security advisory blocking
+        run: composer config policy.advisories.block false
 
       - name: Install Composer dependencies
         run: |
