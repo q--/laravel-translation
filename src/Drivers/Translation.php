@@ -148,6 +148,50 @@ abstract class Translation
     }
 
     /**
+     * Fix pipe characters that Google Translate introduced into a translated piece.
+     *
+     * Laravel has no escape sequence for pipes in translation strings:
+     * MessageSelector::choose() does a plain explode('|', $line) and never
+     * unescapes \|, so neither a bare nor an "escaped" pipe may ever be stored.
+     * Pieces are split on | before being sent to Google, so any pipe in the
+     * response was introduced by Google. The only known cause is Odia (or),
+     * where Google renders the sentence terminator danda (।, U+0964) as an
+     * ASCII pipe. The danda attaches directly to the preceding word, so a
+     * space before the pipe is dropped along with it.
+     *
+     * Some scripts have terminators that merely resemble the danda (Tibetan
+     * shad །, Ol Chiki ᱾), so for any target language other than Odia a
+     * warning is emitted — the danda may be the wrong glyph there.
+     */
+    protected function replaceGoogleIntroducedPipes(string $piece, string $language, string $originalToken): string
+    {
+        if (! str_contains($piece, '|')) {
+            return $piece;
+        }
+
+        if ($language !== 'or') {
+            $this->warnUnexpectedPipeFromGoogle($language, $originalToken, $piece);
+        }
+
+        return preg_replace('/ ?\|/', '।', $piece);
+    }
+
+    /**
+     * Warn that Google Translate introduced a pipe for a language not known to do so.
+     */
+    protected function warnUnexpectedPipeFromGoogle(string $language, string $originalToken, string $translatedPiece): void
+    {
+        fwrite(STDERR, sprintf(
+            "Warning: Google Translate output contained a pipe character when translating %s to %s; it was replaced with a danda (।). Only Odia (or) is known to mis-render its sentence terminator as a pipe — verify the danda is the correct glyph for %s.\nOriginal text: %s\nTranslated text: %s\n",
+            $this->sourceLanguage,
+            $language,
+            $language,
+            $originalToken,
+            $translatedPiece
+        ));
+    }
+
+    /**
      * Translate text using Google Translate (single string, public API for backwards compat).
      *
      * @param $language
@@ -166,9 +210,7 @@ abstract class Translation
         $translated = [];
         foreach (explode('|', $modifiedToken) as $translatableText) {
             $piece = $tr->translate($translatableText);
-            // Escape any pipe in the translated output so Laravel doesn't mistake
-            // it for a pluralization separator (convention: \| means a literal pipe).
-            $translated[] = str_replace('|', '\\|', $piece);
+            $translated[] = $this->replaceGoogleIntroducedPipes($piece, $language, $token);
         }
         $translatedText = implode('|', $translated);
 
@@ -220,7 +262,7 @@ abstract class Translation
                 $translatedVariants = [];
                 foreach ($item['variants'] as $variant) {
                     $piece = $tr->translate($variant);
-                    $translatedVariants[] = str_replace('|', '\\|', $piece);
+                    $translatedVariants[] = $this->replaceGoogleIntroducedPipes($piece, $language, $item['token']);
                 }
                 $item['translated'] = $translatedVariants;
             }
@@ -233,7 +275,11 @@ abstract class Translation
         $resultsByItem = [];
         foreach ($splitParts as $flatIdx => $translatedPart) {
             [$itemIndex, $variantIndex] = $indexMap[$flatIdx];
-            $resultsByItem[$itemIndex][$variantIndex] = str_replace('|', '\\|', trim($translatedPart));
+            $resultsByItem[$itemIndex][$variantIndex] = $this->replaceGoogleIntroducedPipes(
+                trim($translatedPart),
+                $language,
+                $chunk[$itemIndex]['token']
+            );
         }
 
         foreach ($chunk as $itemIndex => &$item) {
@@ -291,7 +337,7 @@ abstract class Translation
             $translated = [];
             foreach (explode('|', $item['modifiedToken']) as $variant) {
                 $piece = $tr->translate($variant);
-                $translated[] = str_replace('|', '\\|', $piece);
+                $translated[] = $this->replaceGoogleIntroducedPipes($piece, $language, $item['token']);
             }
             $joined = implode('|', $translated);
             $results[$compositeKey] = $this->restorePlaceholders(

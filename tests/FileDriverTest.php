@@ -381,31 +381,102 @@ class FileDriverTest extends TestCase
     }
 
     #[Test]
-    public function pipe_characters_in_google_translate_output_are_escaped()
+    public function pipe_characters_in_google_translate_output_are_replaced_with_a_danda()
     {
         $tr = $this->createMock(GoogleTranslate::class);
         $tr->method('translate')->willReturnCallback(function ($text) {
-            // Simulate a language (e.g. Odia) that ends sentences with |
+            // Simulate Odia, where Google renders the sentence terminator danda as " |"
             return $text.' |';
         });
 
         $result = $this->translation->getGoogleTranslate('or', 'Hello', $tr);
 
-        $this->assertSame('Hello \|', $result);
+        // The pipe becomes a danda attached to the preceding word — never \|,
+        // which Laravel would render literally (it has no pipe escaping).
+        $this->assertSame('Hello।', $result);
     }
 
     #[Test]
-    public function pipe_characters_in_google_translate_output_are_escaped_in_plural_strings()
+    public function pipe_characters_are_replaced_with_a_danda_for_any_target_language()
+    {
+        $driver = $this->translationWithWarningSpy();
+
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) {
+            return $text.' |';
+        });
+
+        $result = $driver->getGoogleTranslate('fr', 'Hello', $tr);
+
+        $this->assertSame('Hello।', $result);
+    }
+
+    #[Test]
+    public function a_warning_is_emitted_when_google_introduces_a_pipe_for_a_language_other_than_odia()
+    {
+        $driver = $this->translationWithWarningSpy();
+
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) {
+            return $text.' |';
+        });
+
+        $driver->getGoogleTranslate('fr', 'Hello', $tr);
+
+        $this->assertCount(1, $driver->pipeWarnings);
+        $this->assertSame('fr', $driver->pipeWarnings[0]['language']);
+        $this->assertSame('Hello', $driver->pipeWarnings[0]['originalToken']);
+    }
+
+    #[Test]
+    public function no_warning_is_emitted_when_google_introduces_a_pipe_for_odia()
+    {
+        $driver = $this->translationWithWarningSpy();
+
+        $tr = $this->createMock(GoogleTranslate::class);
+        $tr->method('translate')->willReturnCallback(function ($text) {
+            return $text.' |';
+        });
+
+        $driver->getGoogleTranslate('or', 'Hello', $tr);
+
+        $this->assertSame([], $driver->pipeWarnings);
+    }
+
+    #[Test]
+    public function pipe_characters_in_plural_strings_become_dandas_while_variants_still_join_with_a_pipe()
     {
         $tr = $this->createMock(GoogleTranslate::class);
         $tr->method('translate')->willReturnCallback(function ($text) {
             return $text.' |';
         });
 
-        // Source string has a pluralization separator; each variant gets its translated | escaped
+        // Each variant's Google-introduced | becomes a danda; the variants
+        // themselves are still joined with a genuine pluralization pipe.
         $result = $this->translation->getGoogleTranslate('or', 'One item|Many items', $tr);
 
-        $this->assertSame('One item \||Many items \|', $result);
+        $this->assertSame('One item।|Many items।', $result);
+        $this->assertStringNotContainsString('\\|', $result);
+    }
+
+    /**
+     * A File driver whose pipe warning is captured instead of written to STDERR.
+     */
+    private function translationWithWarningSpy()
+    {
+        return new class(
+            app('files'),
+            app()['path.lang'],
+            'en',
+            app(\JoeDixon\Translation\Scanner::class)
+        ) extends \JoeDixon\Translation\Drivers\File {
+            public $pipeWarnings = [];
+
+            protected function warnUnexpectedPipeFromGoogle(string $language, string $originalToken, string $translatedPiece): void
+            {
+                $this->pipeWarnings[] = compact('language', 'originalToken', 'translatedPiece');
+            }
+        };
     }
 
     #[Test]
@@ -478,7 +549,7 @@ class FileDriverTest extends TestCase
     }
 
     #[Test]
-    public function batch_translate_escapes_pipe_characters_in_batch_mode()
+    public function batch_translate_replaces_pipe_characters_with_a_danda_in_batch_mode()
     {
         $tr = $this->createMock(GoogleTranslate::class);
         $tr->method('translate')->willReturnCallback(function ($text) {
@@ -490,10 +561,10 @@ class FileDriverTest extends TestCase
             'group\0test\0hello' => 'Hello',
         ];
 
-        $results = $this->translation->batchTranslate('es', $tokens, $tr);
+        $results = $this->translation->batchTranslate('or', $tokens, $tr);
 
-        // The injected | must be escaped so Laravel doesn't treat it as a pluralization separator
-        $this->assertStringContainsString('\\|', $results['group\0test\0hello']);
+        $this->assertSame('Hello।', $results['group\0test\0hello']);
+        $this->assertStringNotContainsString('\\|', $results['group\0test\0hello']);
     }
 
     #[Test]
